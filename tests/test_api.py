@@ -1,5 +1,6 @@
 import io
 import json
+from pathlib import Path
 import ssl
 import unittest
 from unittest.mock import Mock, patch
@@ -100,4 +101,4 @@ class ClientTests(unittest.TestCase):
         context.cert_store_stats.return_value = {"x509_ca": 0}
         with patch("nexwacli.api.ssl.create_default_context", return_value=context), patch("nexwacli.api.Path.is_file", return_value=True):
             self.assertIs(tls_context(), context)
-        context.load_verify_locations.assert_called_once_with(cafile="/etc/ssl/cert.pem")
+        context.load_verify_locations.assert_called_once_with(cafile=str(Path("/etc/ssl/cert.pem")))
