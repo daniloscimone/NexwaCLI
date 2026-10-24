@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexwacli"
+version = "0.1.0"
+description = "A terminal client for the Nexwa public API"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Danilo Scimone"}]
+dependencies = []
+classifiers = [
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+[project.scripts]
+nexwa = "nexwacli.cli:main"
+
+[project.urls]
+Homepage = "https://nexwa.store"
+Repository = "https://github.com/daniloscimone/NexwaCLI"
+Issues = "https://github.com/daniloscimone/NexwaCLI/issues"
+
+[tool.setuptools.packages.find]
+include = ["nexwacli*"]

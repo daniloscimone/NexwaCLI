@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T22:54:05.379114+00:00",
+  "title": "Design System: NexwaCLI",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Nexwa purple"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Light purple"
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Soft green"
+      },
+      "warning": {
+        "role": "status",
+        "displayName": "Warm amber"
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Soft rose"
+      }
+    },
+    "terminal": {
+      "platform": "Python terminal dashboard",
+      "runtimeSource": "nexwacli/panel.py",
+      "tokenSource": "nexwacli/panel.py:TOKENS",
+      "colorEncoding": "ANSI 24-bit foreground/background sequences from RGB TOKENS",
+      "background": "Inherited terminal background; only the wordmark has a background fill.",
+      "foreground": "Inherited terminal foreground; wordmark requests ANSI bright-white (97).",
+      "font": "User terminal font and size; no application font or pixel type scale.",
+      "spacing": {
+        "leftInsetSpaces": 2,
+        "groupSeparator": "blank line"
+      },
+      "width": {
+        "expression": "max(16, min(104, terminal_columns - 4))",
+        "fallbackColumns": 88,
+        "wrapMethod": "Python textwrap, string length rather than terminal display-cell measurement",
+        "unwrappedElements": [
+          "wordmark/version line",
+          "numbered navigation choices",
+          "input prompts"
+        ]
+      },
+      "rules": {
+        "unicode": "─",
+        "encodingFallback": "-"
+      },
+      "pagination": {
+        "catalogServicesPerPage": 6,
+        "localReceiptsPerPage": 5
+      },
+      "interaction": "Numbered line input and printed pagination commands; no application hover or focus styles.",
+      "screenRefresh": "Clear/home escape sequence only when color is enabled; no alternate-screen buffer.",
+      "colorConditions": [
+        "stdout is a TTY",
+        "TERM is not dumb",
+        "NO_COLOR is absent",
+        "saved color preference is not off",
+        "Windows virtual terminal output can be enabled when applicable"
+      ],
+      "localization": {
+        "default": "en",
+        "selectable": [
+          "en",
+          "it",
+          "fr",
+          "de",
+          "es",
+          "ru"
+        ],
+        "source": "nexwacli/i18n.py:LANGUAGES"
+      },
+      "componentPreviewPolicy": "Source mappings below document real terminal primitives. HTML/CSS previews, synthesized tonal ramps and web breakpoints are omitted because they do not exist in this implementation."
+    },
+    "evidence": {
+      "sources": [
+        "PRODUCT.md",
+        "nexwacli/panel.py",
+        "nexwacli/i18n.py"
+      ],
+      "renderedOutput": ".artifacts/review/home-*-{40,80,120}.txt",
+      "coverage": "18 plain-text disconnected-home transcripts: all six languages at 40, 80 and 120 columns.",
+      "limitation": "Transcripts verify structure and wrapping, not rendered terminal colors or fonts. No native terminal screenshots were available; Computer Use access to the native terminal app was rejected."
+    }
+  },
+  "components": [
+    {
+      "name": "Wordmark and screen header",
+      "kind": "custom",
+      "refersTo": "wordmark",
+      "description": "Compact NEXWA wordmark and version, accent rule, then translated screen title.",
+      "terminalSource": "nexwacli/panel.py:Terminal.heading",
+      "relatedTokens": [
+        "screen-heading"
+      ],
+      "states": [
+        "Color: brand fill, ANSI bright-white bold wordmark text.",
+        "Plain: uncolored wordmark, rule and title."
+      ]
+    },
+    {
+      "name": "Numbered navigation",
+      "kind": "nav",
+      "refersTo": "navigation-key",
+      "description": "Bracketed accent keys followed by terminal-foreground labels; the first home action has a bold key.",
+      "terminalSource": "nexwacli/panel.py:Terminal.choice",
+      "states": [
+        "Primary key can be bold when color is enabled.",
+        "All choices remain ordinary text when color is disabled."
+      ]
+    },
+    {
+      "name": "Prompt and confirmation",
+      "kind": "custom",
+      "refersTo": "feedback-warning",
+      "description": "Inset line prompt; warning question and explicit translated confirmation; Enter cancels.",
+      "terminalSource": [
+        "nexwacli/panel.py:Panel.ask",
+        "nexwacli/panel.py:Panel.confirm",
+        "nexwacli/panel.py:Panel.login"
+      ],
+      "states": [
+        "Ordinary echoed input.",
+        "Hidden customer-key input via getpass.",
+        "Translated confirmation hint."
+      ]
+    },
+    {
+      "name": "Service row and detail",
+      "kind": "custom",
+      "refersTo": "screen-heading",
+      "description": "Accent service ID and name, stacked metadata, full details and pricing guidance before ordering.",
+      "terminalSource": [
+        "nexwacli/panel.py:Panel.browse",
+        "nexwacli/panel.py:Panel.detail"
+      ]
+    },
+    {
+      "name": "Status feedback and receipts",
+      "kind": "custom",
+      "refersTo": "feedback-success",
+      "description": "Written outcomes with optional semantic color; receipts retain order ID, charge and original request key.",
+      "terminalSource": [
+        "nexwacli/panel.py:Panel.receipt",
+        "nexwacli/panel.py:Panel.orders",
+        "nexwacli/panel.py:Panel.run"
+      ],
+      "relatedTokens": [
+        "feedback-warning",
+        "feedback-error"
+      ],
+      "states": [
+        "Connected or accepted: success with text.",
+        "Unavailable or unknown outcome: warning with text.",
+        "Error: danger with text."
+      ]
+    },
+    {
+      "name": "Settings navigation",
+      "kind": "nav",
+      "refersTo": "navigation-key",
+      "description": "Numbered language, color preference and saved-key choices; language names use their native forms.",
+      "terminalSource": "nexwacli/panel.py:Panel.settings"
+    }
+  ],
+  "narrative": {
+    "overview": "The customer panel inherits the Nexwa website identity. It is a practical terminal dashboard with direct, concise copy, compact screens and ordinary line input. Preserve this incumbent system when adding screens.\n\nUse the terminal's background rather than painting an assumed light or dark canvas. Nexwa purple identifies the wordmark; lighter purple makes headings and navigation keys readable in dark terminals. Information and actions remain understandable with color disabled.",
+    "keyCharacteristics": [
+      "Nexwa website colors on the user's terminal background.",
+      "One compact header, a horizontal rule and a vertical content flow.",
+      "Numbered choices, explicit prompts and written status feedback.",
+      "English by default, with six selectable interface languages."
+    ],
+    "rules": [],
+    "dos": [
+      "**Do** preserve the Nexwa palette and the terminal's own foreground and background.",
+      "**Do** keep wallet credit and the first new-order action easy to find.",
+      "**Do** pair status color with text and preserve usable plain-text output.",
+      "**Do** wrap purchase-review values and check longer translated labels.",
+      "**Do** document terminal behavior in cells, lines and input commands when those are the actual units."
+    ],
+    "donts": [
+      "**Don't** introduce an assumed light or dark canvas, web typography or invented CSS tokens.",
+      "**Don't** add invented customer metrics, simulated wallet balances or decorative charts to the real dashboard.",
+      "**Don't** silently truncate purchase details or imply local receipts are complete account history.",
+      "**Don't** replace explicit confirmations with an immediate purchase or refill action."
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+name: Build executables
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'nexwacli/**'
+      - 'nexwa.py'
+      - 'pyproject.toml'
+      - 'requirements-build.txt'
+      - 'scripts/package.py'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: linux-x64
+          - os: windows-latest
+            target: windows-x64
+          - os: macos-15-intel
+            target: macos-x64
+          - os: macos-15
+            target: macos-arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -v
+      - run: python -m pip install -r requirements-build.txt
+      - run: python -m PyInstaller --clean --noconfirm --onefile --name nexwa nexwa.py
+      - name: Test executable and package
+        env:
+          NEXWA_BUILD_TARGET: ${{ matrix.target }}
+        run: python scripts/package.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nexwa-${{ matrix.target }}
+          path: packages/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: packages
+          pattern: nexwa-*
+          merge-multiple: true
+      - name: Attach packages to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh release upload "$RELEASE_TAG" packages/* --repo "$REPOSITORY" --clobber
