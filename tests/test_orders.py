@@ -156,3 +156,39 @@ class OrderTests(unittest.TestCase):
             self.assertEqual(self.store.config_path.stat().st_mode & 0o777, 0o600)
         self.store.logout()
         self.assertEqual(self.store.saved_key(), "")
+
+class DripFeedTests(unittest.TestCase):
+    args = OrderTests.args
+
+    def setUp(self):
+        OrderTests.setUp(self)
+        self.client.call.return_value = [{**CATALOG[0], "dripfeed": True}]
+
+    def test_drip_preview_totals_and_never_charges(self):
+        result = self.app.run(self.args("--runs", "5", "--interval", "60", "--dry-run"))
+        self.assertEqual(result["total_quantity"], 500)
+        self.assertEqual(result["quantity"], 100)
+        self.assertIn("One payment", result["payment_note"])
+        self.assertIsNone(self.store.request(KEY, "test-1"))
+
+    def test_drip_replay_retains_schedule_and_charges_once(self):
+        self.client.call.side_effect = [[{**CATALOG[0], "dripfeed": True}], {"order": 25}]
+        args = self.args("--runs", "5", "--interval", "60", "--yes")
+        self.app.run(args)
+        self.assertEqual(self.client.call.call_args.kwargs["runs"], 5)
+        self.assertEqual(self.client.call.call_args.kwargs["interval"], 60)
+        self.client.call.reset_mock()
+        self.assertTrue(self.app.run(args)["local_replay"])
+        self.client.call.assert_not_called()
+        args.interval = 120
+        with self.assertRaisesRegex(NexwaError, "different purchase"):
+            self.app.run(args)
+
+    def test_drip_rejects_single_services_and_incomplete_or_excessive_schedules(self):
+        for flags in [("--runs", "2"), ("--interval", "60"), ("--runs", "1", "--interval", "60"), ("--runs", "11", "--interval", "60")]:
+            with self.assertRaises(NexwaError):
+                self.app.run(self.args(*flags, "--dry-run"))
+        for patch_data in [{"dripfeed": False}, {"dripfeed": True, "pricing_unit": "item"}, {"dripfeed": True, "type": "Package"}]:
+            with patch.object(self.store, "catalog", return_value=[{**CATALOG[0], **patch_data}]):
+                with self.assertRaises(NexwaError):
+                    self.app.run(self.args("--runs", "2", "--interval", "60", "--dry-run"))

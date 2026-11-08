@@ -200,6 +200,21 @@ nexwa orders create \
 
 The catalog's `rate` is a reference price per 1,000 units. It is not an exact quote for every quantity or pricing unit. Nexwa calculates the final charge, including applicable minimums and promotions. The CLI does not apply its own markup or calculate an alternative sale price.
 
+### Drip-feed (0.2.0)
+
+On compatible services, split an order into repeated runs:
+
+```sh
+nexwa orders create --service 123 --link 'https://instagram.com/example/' \
+  --quantity 100 --runs 10 --interval 60 --dry-run
+```
+
+`--quantity` is the quantity per run, `--runs` is the number of runs (at least 2), and `--interval` is the interval in whole minutes (at least 1). This example requests 1,000 units in total. **A single wallet payment covers the entire order. There are no recurring charges.** The total must respect the service maximum.
+
+The interactive panel offers Drip-feed only after selecting a compatible service. Single-unit services and packages do not offer this option. `nexwa services <ID> --refresh` shows the current `dripfeed` capability; an API that does not advertise it cannot be used for Drip-feed orders. The updated Nexwa API must be deployed before this option becomes available.
+
+Retries retain the original quantity, runs, interval and request key. Changing the schedule with the same request key is rejected. Use a new key only for an intentionally separate purchase.
+
 ### Interrupted requests
 
 Before sending a purchase, NexwaCLI saves the payload and a request key locally. It sends that key as the API's `idempotency_key`. If you do not provide a key, the CLI generates one and prints it before sending the order.
@@ -226,7 +241,7 @@ nexwa orders status 1042,1043 --json
 nexwa orders refill 1042
 ```
 
-The API accepts up to 100 distinct order IDs per status request. It returns statuses such as `Pending`, `In progress`, `Processing`, `Partial`, `Completed`, and `Canceled`. The interactive panel translates these labels. `start_count` and `remains` currently come back as `null`; they are unknown values, not zero.
+The API accepts up to 100 distinct order IDs per status request. It returns statuses such as `Pending`, `In progress`, `Processing`, `Partial`, `Completed`, and `Canceled`. The interactive panel translates these labels. `start_count` and `remains` can be `null` when unavailable; these are unknown values, not zero. Drip-feed status responses also include `quantity` per run, `runs`, `interval`, and `total_quantity`.
 
 A refill is available only when Nexwa accepts the request for that order. The public API does not currently expose order cancellation, refill-status lookup, account-wide order listing, wallet top-ups, or API key creation. A capability flag in the service catalog does not add an API endpoint.
 

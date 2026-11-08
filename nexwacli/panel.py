@@ -298,10 +298,18 @@ class Panel:
         if not int(service["min"]) <= quantity <= int(service["max"]):
             raise NexwaError(self.t("quantity_limits", minimum=service["min"], maximum=service["max"]))
         params = {"service": int(service["service"]), "link": link, "quantity": quantity}
-        self.app.preview(client, params)
+        from .cli import drip_available
+        if drip_available(service) and self.confirm("drip_enable"):
+            params["runs"] = self.number(self.ask("drip_runs"))
+            params["interval"] = self.number(self.ask("drip_interval"))
+        preview = self.app.preview(client, params)
         self.ui.heading(self.t("review"))
-        for label, value in (("service", service.get("name", service["service"])), ("target", params["link"]), ("quantity", params["quantity"])):
+        for label, value in (("service", service.get("name", service["service"])), ("target", params["link"]), ("drip_per_run" if "runs" in params else "quantity", params["quantity"])):
             self.ui.line(f"{self.t(label)}: {value}")
+        if "runs" in params:
+            for label, value in (("drip_runs", params["runs"]), ("drip_interval", params["interval"]), ("drip_total_label", preview["total_quantity"])):
+                self.ui.line(f"{self.t(label)}: {value}")
+            self.ui.line(self.t("drip_payment"), "accent")
         print()
         self.ui.line(self.t("price_note"), "warning")
         if not self.confirm("purchase_confirm"):
@@ -346,6 +354,10 @@ class Panel:
                 raise NexwaError(self.t("missing_request"))
             for label, value in (("service", record["params"]["service"]), ("target", record["params"]["link"]), ("quantity", record["params"]["quantity"])):
                 self.ui.line(f"{self.t(label)}: {value}")
+            if record["params"].get("runs"):
+                for label, value in (("drip_runs", record["params"]["runs"]), ("drip_interval", record["params"]["interval"]), ("drip_total_label", record["params"]["quantity"] * record["params"]["runs"])):
+                    self.ui.line(f"{self.t(label)}: {value}")
+                self.ui.line(self.t("drip_payment"), "accent")
             if not record.get("response") and not self.confirm("retry_confirm"):
                 return
             self.receipt(self.app.submit(client, record, announce=False, warn=self.receipt_warning))
@@ -372,7 +384,7 @@ class Panel:
                 self.ui.line(self.t("no_orders"))
             for record in receipts[page * 5:page * 5 + 5]:
                 response = record.get("response", {})
-                self.ui.line(f"#{response.get('order', '—')}  /  {self.t('service')} {record['params']['service']}  /  {record['params']['quantity']}  /  {self.t('accepted' if response else 'unknown')}", "success" if response else "warning")
+                self.ui.line(f"#{response.get('order', '—')}  /  {self.t('service')} {record['params']['service']}  /  {record['params']['quantity'] * record['params'].get('runs', 1)}  /  {self.t('accepted' if response else 'unknown')}", "success" if response else "warning")
                 self.ui.line(f"{record['created_at']}  /  {record['request_key']}")
             print()
             for key, label in (("1", "status"), ("2", "retry"), ("3", "refill"), ("0", "back")):

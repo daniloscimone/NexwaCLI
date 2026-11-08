@@ -26,6 +26,10 @@ def positive(value):
     return int(value)
 
 
+def drip_available(service):
+    return service.get("dripfeed") is True and int(service.get("max", 0)) > 1 and service.get("pricing_unit") != "item" and not re.search(r"package|per item|single", str(service.get("type", "")), re.I)
+
+
 def request_key(value):
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,120}", value):
         raise NexwaError("Request keys must be 1-120 letters, digits, dots, underscores, colons or hyphens.", "invalid_request_key")
@@ -119,6 +123,8 @@ def parser():
     create.add_argument("--service", type=positive, required=True)
     create.add_argument("--link", required=True)
     create.add_argument("--quantity", type=positive, required=True)
+    create.add_argument("--runs", type=positive, help="Drip-feed runs (at least 2); --quantity is per run")
+    create.add_argument("--interval", type=positive, help="Drip-feed interval in whole minutes; requires --runs")
     create.add_argument("--request-key", help="stable idempotency key for this purchase (generated if omitted)")
     create.add_argument("--dry-run", action="store_true", help="validate and preview without submitting an order")
     create.add_argument("--yes", "-y", action="store_true", help="confirm spending Nexwa wallet credit")
@@ -190,7 +196,19 @@ class App:
             raise NexwaError("The catalog has invalid quantity limits. Refresh it before ordering.", "invalid_response") from None
         if not minimum <= params["quantity"] <= maximum:
             raise NexwaError(f"This service accepts quantities between {minimum} and {maximum}.", "quantity_limits", minimum=minimum, maximum=maximum)
+        schedule = {}
+        if "runs" in params or "interval" in params:
+            runs, interval = params.get("runs"), params.get("interval")
+            if not isinstance(runs, int) or isinstance(runs, bool) or runs < 2 or not isinstance(interval, int) or isinstance(interval, bool) or not 1 <= interval <= 2147483647:
+                raise NexwaError("Drip-feed needs at least 2 runs and an interval of at least 1 whole minute.", "drip_invalid")
+            if not drip_available(service):
+                raise NexwaError("Drip-feed is unavailable for this service. Refresh the catalog or choose another service.", "drip_unavailable")
+            total = params["quantity"] * runs
+            if total > min(maximum, 2147483647):
+                raise NexwaError("The Drip-feed total exceeds the service maximum.", "drip_total", maximum=maximum)
+            schedule = {"runs":runs, "interval":interval, "total_quantity":total, "payment_note":"One payment covers all runs. No recurring charge."}
         return {
+            **schedule,
             "service": params["service"], "name": service.get("name", ""),
             "link": params["link"], "quantity": params["quantity"],
             "min": minimum, "max": maximum,
@@ -226,6 +244,8 @@ class App:
 
     def create(self, args, client):
         params = {"service": args.service, "link": target_url(args.link), "quantity": args.quantity}
+        if args.runs is not None or args.interval is not None:
+            params.update(runs=args.runs, interval=args.interval)
         key = request_key(args.request_key or str(uuid.uuid4()))
         with self.store.lock(client.key, key):
             existing = self.store.request(client.key, key)
@@ -312,7 +332,7 @@ class App:
             print("Showing up to the selected limit. Use --all for all matches, --refresh for current data.")
         elif args.command == "orders" and args.order_command == "list":
             table(["Created (UTC)", "Order", "Service", "Qty", "Local state", "Request key"], [
-                [r["created_at"], r.get("response", {}).get("order", "unknown"), r["params"]["service"], r["params"]["quantity"], r.get("state", "pending"), r["request_key"]] for r in result])
+                [r["created_at"], r.get("response", {}).get("order", "unknown"), r["params"]["service"], r["params"]["quantity"] * r["params"].get("runs", 1), r.get("state", "pending"), r["request_key"]] for r in result])
             print("Local receipts for this API key. Use 'orders status <ID>' for live delivery status.")
         else:
             output(result)

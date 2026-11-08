@@ -169,3 +169,28 @@ class PanelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DripPanelTests(unittest.TestCase):
+    setUp = PanelTests.setUp
+
+    def test_guided_drip_shows_total_and_submits_once(self):
+        service = {**CATALOG[0], "dripfeed": True}
+        self.client.call.side_effect = lambda action, **params: [service] if action == "services" else {"order":88,"charge":"2.00","currency":"EUR"}
+        with patch("builtins.input", side_effect=["https://instagram.com/example/", "100", "yes", "5", "60", "yes", ""]):
+            Panel(self.app).purchase(service)
+        sent = [call for call in self.client.call.call_args_list if call.args[0] == "add"]
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].kwargs["runs"], 5)
+        self.assertEqual(sent[0].kwargs["quantity"], 100)
+        self.assertIn("Total quantity: 500", self.output.getvalue())
+        self.assertIn("One payment", self.output.getvalue())
+
+    def test_single_order_never_offers_drip(self):
+        service = {**CATALOG[0], "dripfeed":True, "min":1, "max":1}
+        self.client.call.return_value = [service]
+        self.client.call.side_effect = None
+        with patch("builtins.input", side_effect=["https://instagram.com/example/", "1", "", ""]):
+            Panel(self.app).purchase(service)
+        self.assertNotIn("Enable Drip-feed", self.output.getvalue())
+        self.assertNotIn("add", [call.args[0] for call in self.client.call.call_args_list])
