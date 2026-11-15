@@ -133,6 +133,23 @@ class OrderTests(unittest.TestCase):
         self.client.call.assert_called_once_with("status", orders="1,2")
         self.assertIn("error", result["2"])
 
+    def test_email_service_accepts_email_and_sends_it_in_supplier_link(self):
+        catalog = [{**CATALOG[0], "target_type": "email"}]
+        self.client.call.side_effect = [catalog, {"order": 27}]
+        args = self.args("--yes")
+        args.link = "delivery@example.test"
+        result = self.app.run(args)
+        self.assertEqual(result["order"], 27)
+        self.assertEqual(self.client.call.call_args.kwargs["link"], "delivery@example.test")
+
+    def test_email_target_is_rejected_for_ordinary_services(self):
+        self.client.call.return_value = CATALOG
+        args = self.args("--yes")
+        args.link = "delivery@example.test"
+        with self.assertRaises(NexwaError):
+            self.app.run(args)
+        self.assertIsNone(self.store.request(KEY, "test-1"))
+
     def test_target_url_validation(self):
         for url in ("file:///tmp/test", "https://user:password@example.com", "https://example.com/a b", "https://example.com:bad", "https://"):
             with self.assertRaises(NexwaError):

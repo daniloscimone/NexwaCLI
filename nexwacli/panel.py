@@ -213,6 +213,7 @@ class Panel:
 
     def detail(self, service):
         self.ui.heading(f"#{service['service']}  /  {service.get('name', '')}")
+        self.ui.line("Server 2" if service.get("server") == "server2" else "Server 1", "accent")
         currency = service.get("currency", "EUR")
         for key, value in (("platform", service.get("platform", "")), ("category", service.get("category", "")), ("description", service.get("description") or "—"), ("rate", f"{service.get('rate', '—')} {currency}"), ("per_item", f"{service.get('price_per_item', '—')} {currency}"), ("pricing_unit", service.get("pricing_unit", "—")), ("limits", f"{service.get('min')} – {service.get('max')}"), ("refill_available", self.t("yes" if service.get("refill") else "no"))):
             self.ui.line(f"{self.t(key)}: {value}")
@@ -271,7 +272,7 @@ class Panel:
         self.balance_at = 0
 
     def purchase(self, service=None):
-        from .cli import target_url
+        from .cli import service_target
 
         client = self.client()
         if service is None:
@@ -291,9 +292,9 @@ class Panel:
                     raise NexwaError(self.t("not_found"))
         self.detail(service)
         try:
-            link = target_url(self.ask("target"))
+            link = service_target(self.ask("delivery_email" if service.get("target_type") == "email" else "target"), service)
         except NexwaError:
-            raise NexwaError(self.t("invalid_url")) from None
+            raise NexwaError(self.t("invalid_email" if service.get("target_type") == "email" else "invalid_url")) from None
         quantity = self.number(self.ask("quantity"))
         if not int(service["min"]) <= quantity <= int(service["max"]):
             raise NexwaError(self.t("quantity_limits", minimum=service["min"], maximum=service["max"]))
@@ -304,7 +305,7 @@ class Panel:
             params["interval"] = self.number(self.ask("drip_interval"))
         preview = self.app.preview(client, params)
         self.ui.heading(self.t("review"))
-        for label, value in (("service", service.get("name", service["service"])), ("target", params["link"]), ("drip_per_run" if "runs" in params else "quantity", params["quantity"])):
+        for label, value in (("service", service.get("name", service["service"])), ("delivery_email" if service.get("target_type") == "email" else "target", params["link"]), ("drip_per_run" if "runs" in params else "quantity", params["quantity"])):
             self.ui.line(f"{self.t(label)}: {value}")
         if "runs" in params:
             for label, value in (("drip_runs", params["runs"]), ("drip_interval", params["interval"]), ("drip_total_label", preview["total_quantity"])):

@@ -124,6 +124,14 @@ Before submitting an order, the panel shows the service, target link, quantity, 
 
 **Wallet** opens the account page for credit top-ups and key management. Funding and email verification take place on the website.
 
+### Server 1 and Server 2
+
+The combined catalog identifies each service with `(server 1)` or `(server 2)`. The service ID determines which server receives the order. Filter the command-line catalog with `nexwa services --server server1` or `nexwa services --server server2`. JSON service and status responses include a `server` field.
+
+Server 2 may label services BASIC, MEDIUM, or ELITE. Read the individual delivery and refill conditions before purchasing. Nexwa publishes boost services. Account sales, credentials, activation codes, licenses, and resold access are excluded. Availability and prices are checked by Nexwa when submitting the order.
+
+A service with `target_type: "email"` asks for a delivery email. Other services require a public HTTP(S) target. Maintenance or a disabled server can temporarily prevent new purchases.
+
 ### Language and colors
 
 Open **Settings → Language** to choose English, Italiano, Français, Deutsch, Español, or Русский. The change applies immediately and is saved for the next launch.

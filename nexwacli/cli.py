@@ -48,6 +48,15 @@ def target_url(value):
     return value
 
 
+def service_target(value, service):
+    if service.get("target_type", "url") != "email":
+        return target_url(value)
+    value = value.strip()
+    if len(value) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+        raise NexwaError("Enter a valid delivery email address.", "invalid_email")
+    return value
+
+
 def table(headers, rows):
     if not rows:
         print("No results.")
@@ -113,6 +122,7 @@ def parser():
     services = subs.add_parser("services", help="browse the Nexwa catalog", parents=[common])
     services.add_argument("service", nargs="?", type=positive, help="show a single service with its description")
     services.add_argument("--search", default="", help="search name, category, platform and description")
+    services.add_argument("--server", choices=("server1", "server2"), default="", help="filter by Server 1 or Server 2 (combined by default)")
     services.add_argument("--platform", default="", help="filter by platform (case insensitive)")
     services.add_argument("--category", default="", help="filter by category text")
     services.add_argument("--limit", type=positive, default=50, help="maximum results (default: 50)")
@@ -121,7 +131,7 @@ def parser():
     orders = subs.add_parser("orders", help="place and track orders", parents=[common]).add_subparsers(dest="order_command", required=True)
     create = orders.add_parser("create", help="place an order using your Nexwa credit", parents=[common])
     create.add_argument("--service", type=positive, required=True)
-    create.add_argument("--link", required=True)
+    create.add_argument("--link", required=True, help="public target URL, or delivery email for services that require email")
     create.add_argument("--quantity", type=positive, required=True)
     create.add_argument("--runs", type=positive, help="Drip-feed runs (at least 2); --quantity is per run")
     create.add_argument("--interval", type=positive, help="Drip-feed interval in whole minutes; requires --runs")
@@ -181,6 +191,7 @@ class App:
                 raise NexwaError("Service not found. Refresh the catalog with --refresh.")
             return match
         matches = [s for s in services if
+                   (not getattr(args, "server", "") or s.get("server", "server1") == args.server) and
                    (not args.platform or str(s.get("platform", "")).casefold() == args.platform.casefold()) and
                    args.category.casefold() in str(s.get("category", "")).casefold() and
                    args.search.casefold() in " ".join(str(s.get(k, "")) for k in ("name", "platform", "category", "description")).casefold()]
@@ -190,6 +201,7 @@ class App:
         service = next((s for s in self.store.catalog(client) if str(s["service"]) == str(params["service"])), None)
         if service is None:
             raise NexwaError("Service not found. Run 'nexwa services --refresh' and check its ID.", "not_found")
+        params["link"] = service_target(params["link"], service)
         try:
             minimum, maximum = int(service["min"]), int(service["max"])
         except (KeyError, TypeError, ValueError):
@@ -210,7 +222,7 @@ class App:
         return {
             **schedule,
             "service": params["service"], "name": service.get("name", ""),
-            "link": params["link"], "quantity": params["quantity"],
+            "link": params["link"], "target_type": service.get("target_type", "url"), "quantity": params["quantity"],
             "min": minimum, "max": maximum,
             "rate_per_1000": service.get("rate"),
             "price_per_item": service.get("price_per_item"),
@@ -243,7 +255,7 @@ class App:
         return {**response, "request_key": key}
 
     def create(self, args, client):
-        params = {"service": args.service, "link": target_url(args.link), "quantity": args.quantity}
+        params = {"service": args.service, "link": args.link.strip(), "quantity": args.quantity}
         if args.runs is not None or args.interval is not None:
             params.update(runs=args.runs, interval=args.interval)
         key = request_key(args.request_key or str(uuid.uuid4()))
@@ -326,8 +338,8 @@ class App:
         if args.json:
             output(result, True)
         elif args.command == "services" and isinstance(result, list):
-            table(["ID", "Platform", "Service", "EUR / 1k", "Min", "Max", "Refill"], [
-                [s["service"], s.get("platform", ""), s.get("name", ""), s.get("rate", ""), s.get("min", ""), s.get("max", ""), "yes" if s.get("refill") else "no"] for s in result])
+            table(["ID", "Server", "Platform", "Service", "EUR / 1k", "Min", "Max", "Refill"], [
+                [s["service"], "Server 2" if s.get("server") == "server2" else "Server 1", s.get("platform", ""), s.get("name", ""), s.get("rate", ""), s.get("min", ""), s.get("max", ""), "yes" if s.get("refill") else "no"] for s in result])
             print("Catalog reference prices. Use 'nexwa services <ID>' for pricing units and details.")
             print("Showing up to the selected limit. Use --all for all matches, --refresh for current data.")
         elif args.command == "orders" and args.order_command == "list":
