@@ -262,7 +262,11 @@ nexwa balance --json
 nexwa --timeout 45 orders status 1042 --json
 ```
 
-The timeout defaults to 30 seconds and can be set between 1 and 300. API error messages are preserved, including application errors returned with HTTP 200. HTTP 429 reports the `Retry-After` header rather than retrying a purchase.
+The timeout defaults to 30 seconds and can be set between 1 and 300. API error messages are preserved, including application errors returned with HTTP 200. A refund awaiting verification remains an error: the CLI keeps the purchase journal pending and does not display an accepted order. Keep its request key and contact support before placing a new order; a manual same-key retry can finish a pending refund without a second credit or supplier submission.
+
+For HTTP 429, read-only `balance`, `services`, and `status` calls retry at most twice. They respect `Retry-After` seconds or HTTP dates and use increasing waits of at least 1 and 2 seconds. Each automatic wait is limited to 30 seconds; a longer server deadline stops the command instead of retrying early. Wait notices go to standard error, leaving JSON results on standard output. Purchases and refill requests never retry automatically, including after HTTP 429 or a network failure; errors retain the response status and `Retry-After` value.
+
+A 401 does not distinguish an invalid, expired, or revoked key; check or replace it in your account. For 403, read the server message and check email verification and API permissions. No existing commands or options changed in 0.2.1.
 
 Exit codes:
 
