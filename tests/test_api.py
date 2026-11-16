@@ -42,10 +42,10 @@ class ClientTests(unittest.TestCase):
         with self.assertRaisesRegex(APIError, "Insufficient balance"):
             self.client.call("add")
 
-    def test_429_preserves_retry_after_and_does_not_retry(self):
+    def test_429_preserves_retry_after_and_does_not_retry_purchase(self):
         self.client.opener.open.side_effect = HTTPError(API_URL, 429, "Too many requests", {"Retry-After": "18"}, io.BytesIO(b'{"error":"Slow down"}'))
         with self.assertRaises(APIError) as caught:
-            self.client.call("services")
+            self.client.call("add", idempotency_key="fixture-stable-request")
         self.assertEqual(caught.exception.status, 429)
         self.assertEqual(caught.exception.retry_after, "18")
         self.assertEqual(self.client.opener.open.call_count, 1)

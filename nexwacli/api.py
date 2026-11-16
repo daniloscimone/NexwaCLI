@@ -1,11 +1,15 @@
 """Small HTTPS client for the five published Nexwa API actions."""
 
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 import http.client
 import json
 import math
 from pathlib import Path
 import socket
 import ssl
+import sys
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
@@ -15,6 +19,28 @@ from . import __version__
 API_URL = "https://nexwa.store/api/v2"
 ACCOUNT_URL = "https://nexwa.store/account.html"
 MAX_RESPONSE = 8 * 1024 * 1024
+MAX_RATE_RETRIES = 2
+MAX_RATE_WAIT = 30
+READ_ACTIONS = {"balance", "services", "status"}
+
+
+def retry_delay(value, attempt):
+    """Respect Retry-After seconds or HTTP dates without waiting indefinitely."""
+    floor = 2 ** attempt
+    if value is None:
+        return floor
+    value = str(value).strip()
+    if len(value) > 64:
+        return float("inf")
+    if value.isascii() and value.isdecimal():
+        return max(floor, int(value))
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=timezone.utc)
+        return max(floor, date.timestamp() - time.time())
+    except (ValueError, TypeError, OverflowError):
+        return floor
 
 
 class NexwaError(Exception):
@@ -87,38 +113,50 @@ class Client:
             },
             method="POST",
         )
-        # Purchases and refill requests are never retried automatically.
-        try:
+        # Only explicit rate limits on read-only actions permit automatic retry.
+        # A purchase or refill response may require manual reconciliation.
+        for attempt in range(MAX_RATE_RETRIES + 1):
             try:
-                response = self.opener.open(request, timeout=self.timeout)
-            except HTTPError as exc:
-                response = exc
-            with response:
-                status = response.code
-                retry_after = response.headers.get("Retry-After")
-                raw = response.read(MAX_RESPONSE + 1)
-        except (URLError, OSError, socket.timeout, ssl.SSLError, http.client.HTTPException):
-            raise APIError(
-                "Could not complete the Nexwa request. Check your connection and TLS certificates. "
-                "If you were placing an order, its outcome may be unknown; keep the same request key.",
-                message_code="network_error",
-            ) from None
+                try:
+                    response = self.opener.open(request, timeout=self.timeout)
+                except HTTPError as exc:
+                    response = exc
+                with response:
+                    status = response.code
+                    retry_after = response.headers.get("Retry-After")
+                    raw = response.read(MAX_RESPONSE + 1)
+            except (URLError, OSError, socket.timeout, ssl.SSLError, http.client.HTTPException):
+                raise APIError(
+                    "Could not complete the Nexwa request. Check your connection and TLS certificates. "
+                    "If you were placing an order, its outcome may be unknown; keep the same request key.",
+                    message_code="network_error",
+                ) from None
+            if status != 429 or action not in READ_ACTIONS or attempt == MAX_RATE_RETRIES:
+                break
+            delay = retry_delay(retry_after, attempt)
+            if delay > MAX_RATE_WAIT:
+                break  # Never retry before a longer server-specified deadline.
+            print(f"Nexwa rate limit reached. Waiting {delay:g}s before retry {attempt + 1}/{MAX_RATE_RETRIES}.", file=sys.stderr)
+            time.sleep(delay)
         if len(raw) > MAX_RESPONSE:
             raise APIError("Nexwa returned a response larger than 8 MiB.", status, message_code="invalid_response")
         try:
             data = json.loads(raw)
         except (ValueError, UnicodeError):
-            raise APIError(f"Nexwa returned a non-JSON response (HTTP {status}).", status, message_code="invalid_response") from None
+            if status == 429:
+                data = {"error": "Nexwa rate limit reached."}
+            else:
+                raise APIError(f"Nexwa returned a non-JSON response (HTTP {status}).", status, message_code="invalid_response") from None
         if not 200 <= status < 300 or (isinstance(data, dict) and "error" in data):
             message = str(data.get("error", f"Request failed (HTTP {status}).")) if isinstance(data, dict) else f"Request failed (HTTP {status})."
             message = message.replace(self.key, "[redacted]")
             server_message = message
             if status == 401:
-                message += " Generate or check your customer API key on nexwa.store."
+                message += " The key may be invalid, expired, or revoked. Check or replace it on nexwa.store; Nexwa does not disclose which condition applies."
             elif status == 403:
-                message += " Check that your Nexwa account email is verified."
+                message += " Check your account email verification and API permissions on nexwa.store."
             elif status == 429:
-                message += f" Rate limit reached. Retry-After: {retry_after or 'not provided'}."
+                message += f" Rate limit reached. Retry-After: {retry_after or 'not provided'}. Wait before trying again. For purchases, keep the original request key."
             raise APIError(message, status, retry_after, server_message=server_message)
         if action == "services":
             if not isinstance(data, list) or any(not isinstance(s, dict) or "service" not in s for s in data):
